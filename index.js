@@ -52,6 +52,27 @@ app.get("/api/messages/:userId/:senderId", async (req, res) => {
   }
 });
 
+app.delete("/api/deletemessages/:msgId", async (req, res) => {
+  try {
+    const msgId = req.params.msgId;
+
+    console.log("msgId", msgId);
+    // Fetch messages where the senderId or recipientId matches the userId
+    const messages = await Message.findByIdAndDelete(msgId);
+    if (!messages) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      messages: messages,
+      message: "User deleted successfully"
+    });
+  } catch (error) {
+    console.error("Error fetching messages:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.use("/api", allApiRoutes);
 
 app.get("*", (req, res) => {
