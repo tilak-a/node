@@ -55,7 +55,7 @@ app.get("/api/messages/:userId/:senderId", async (req, res) => {
 app.use("/api", allApiRoutes);
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "build", "index.html"));
+  res.sendFile(path.join(__dirname + "/build/index.html"));
 });
 
 io.use((socket, next) => {
