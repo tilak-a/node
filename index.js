@@ -98,6 +98,37 @@ app.delete("/api/deletemessages/:msgId", async (req, res) => {
   }
 });
 
+app.delete(
+  "/api/deleteallmessages/userId=:userId&senderId=:senderId",
+  async (req, res) => {
+    try {
+      const { userId, senderId } = req.params;
+      console.log("userId:", userId);
+      console.log("senderId:", senderId);
+
+      // delete messages where the senderId or recipientId matches the userId
+      const messages = await Message.deleteMany({
+        $or: [
+          { $and: [{ senderId: userId }, { recipientId: senderId }] },
+          { $and: [{ senderId: senderId }, { recipientId: userId }] }
+        ]
+      });
+
+      if (!messages) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      res.status(200).json({
+        messages: `${messages.deletedCount} deleted successfully`,
+        message: "Messages deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 app.use("/api", allApiRoutes);
 
 app.get("*", (req, res) => {
@@ -131,7 +162,7 @@ io.on("connection", socket => {
   console.log("Socket connected:", socket.id);
 
   // Handle when a user sends a message
-  socket.on("msg", async ({ msg, recipientId, senderId }) => {
+  socket.on("msg", async ({ msg, recipientId, senderId, name }) => {
     try {
       // Ensure that the senderId and recipientId are provided
       if (!senderId || !recipientId) {
@@ -145,6 +176,7 @@ io.on("connection", socket => {
           message: msg,
           senderId,
           recipientId,
+          name,
           timestamp: Date.now()
         });
       } else {
@@ -158,6 +190,7 @@ io.on("connection", socket => {
           message: msg,
           senderId,
           recipientId,
+          name,
           timestamp: Date.now()
         });
       } else {
