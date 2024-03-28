@@ -25,7 +25,7 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 app.use(
   cors({
-    origin: "http://localhost:3001"
+    origin: "*"
   })
 );
 
@@ -37,7 +37,6 @@ app.get("/api/messages/:userId/:senderId", async (req, res) => {
     const userId = req.params.userId;
     const senderId = req.params.senderId;
 
-    console.log("senderId", senderId, userId);
     // Fetch messages where the senderId or recipientId matches the userId
     const messages = await Message.find({
       $or: [
@@ -81,7 +80,6 @@ app.delete("/api/deletemessages/:msgId", async (req, res) => {
   try {
     const msgId = req.params.msgId;
 
-    console.log("msgId", msgId);
     // Fetch messages where the senderId or recipientId matches the userId
     const messages = await Message.findByIdAndDelete(msgId);
     if (!messages) {
@@ -103,8 +101,6 @@ app.delete(
   async (req, res) => {
     try {
       const { userId, senderId } = req.params;
-      console.log("userId:", userId);
-      console.log("senderId:", senderId);
 
       // delete messages where the senderId or recipientId matches the userId
       const messages = await Message.deleteMany({
@@ -161,68 +157,97 @@ const userSocketMap = {};
 io.on("connection", socket => {
   console.log("Socket connected:", socket.id);
 
-  // Handle when a user sends a message
-  socket.on("msg", async ({ msg, recipientId, senderId, name }) => {
-    try {
-      // Ensure that the senderId and recipientId are provided
-      if (!senderId || !recipientId) {
-        throw new Error("Sender ID or recipient ID is missing");
-      }
-
-      // Emit the message to the recipient
-      const recipientSocketId = userSocketMap[recipientId];
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit("recive", {
-          message: msg,
-          senderId,
-          recipientId,
-          name,
-          timestamp: Date.now()
-        });
-      } else {
-        console.log("Recipient socket not found for user ID:", recipientId);
-      }
-
-      // Optionally, you can also emit the message to the sender
-      const senderSocketId = userSocketMap[senderId];
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("recive", {
-          message: msg,
-          senderId,
-          recipientId,
-          name,
-          timestamp: Date.now()
-        });
-      } else {
-        console.log("Sender socket not found for user ID:", senderId);
-      }
-
-      // Save the message to the database or perform other actions as needed
-      if (!senderId) {
-        throw new Error("Sender ID is missing or invalid");
-      }
-
-      await saveMessageToDatabase(senderId, recipientId, msg);
-    } catch (error) {
-      console.error("Error handling message:", error);
-    }
+  socket.on("joinRoom", roomId => {
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.broadcast.to(roomId).emit("userJoined", socket.id); // Emit userJoined event
   });
 
-  // Add the socket ID to the userSocketMap when a user connects
-  socket.on("userId", userId => {
-    userSocketMap[userId] = socket.id;
+  socket.on("offer", offer => {
+    // Broadcast the offer to all connected clients except the sender
+    socket.to(offer.target).emit("offer", offer);
   });
 
-  // Remove the socket ID from the userSocketMap when a user disconnects
+  socket.on("answer", answer => {
+    // Broadcast the answer to all connected clients except the sender
+    socket.to(answer.target).emit("answer", answer);
+  });
+
+  socket.on("iceCandidate", candidate => {
+    // Broadcast the ICE candidate to all connected clients except the sender
+    socket.to(candidate.target).emit("iceCandidate", candidate);
+  });
+
+  // Handle disconnection
   socket.on("disconnect", () => {
-    for (const userId in userSocketMap) {
-      if (userSocketMap[userId] === socket.id) {
-        delete userSocketMap[userId];
-        break;
-      }
-    }
-    console.log("Socket disconnected:", socket.id);
+    console.log("A user disconnected");
+    socket.broadcast.to(socket.roomId).emit("userLeft", socket.id);
   });
+
+  // Handle when a user sends a message
+  // socket.on("msg", async ({ msg, recipientId, senderId, name }) => {
+  //   try {
+  //     // Ensure that the senderId and recipientId are provided
+  //     if (!senderId || !recipientId) {
+  //       throw new Error("Sender ID or recipient ID is missing");
+  //     }
+
+  //     // Emit the message to the recipient
+  //     const recipientSocketId = userSocketMap[recipientId];
+  //     if (recipientSocketId) {
+  //       io.to(recipientSocketId).emit("recive", {
+  //         message: msg,
+  //         senderId,
+  //         recipientId,
+  //         name,
+  //         timestamp: Date.now()
+  //       });
+  //       console.log("map", userSocketMap);
+  //     } else {
+  //       console.log("Recipient socket not found for user ID:", recipientId);
+  //     }
+
+  //     // Optionally, you can also emit the message to the sender
+  //     const senderSocketId = userSocketMap[senderId];
+  //     if (senderSocketId) {
+  //       io.to(senderSocketId).emit("recive", {
+  //         message: msg,
+  //         senderId,
+  //         recipientId,
+  //         name,
+  //         timestamp: Date.now()
+  //       });
+  //       console.log("map", userSocketMap);
+  //     } else {
+  //       console.log("Sender socket not found for user ID:", senderId);
+  //     }
+
+  //     // Save the message to the database or perform other actions as needed
+  //     if (!senderId) {
+  //       throw new Error("Sender ID is missing or invalid");
+  //     }
+
+  //     await saveMessageToDatabase(senderId, recipientId, msg);
+  //   } catch (error) {
+  //     console.error("Error handling message:", error);
+  //   }
+  // });
+
+  // // Add the socket ID to the userSocketMap when a user connects
+  // socket.on("userId", userId => {
+  //   userSocketMap[userId] = socket.id;
+  // });
+
+  // // Remove the socket ID from the userSocketMap when a user disconnects
+  // socket.on("disconnect", () => {
+  //   for (const userId in userSocketMap) {
+  //     if (userSocketMap[userId] === socket.id) {
+  //       delete userSocketMap[userId];
+  //       break;
+  //     }
+  //   }
+  //   console.log("Socket disconnected:", socket.id);
+  // });
 });
 
 // Define the schema for messages

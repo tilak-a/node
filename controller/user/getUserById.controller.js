@@ -3,7 +3,6 @@ const User = require("../../models/user.model");
 const getUserById = async (req, res) => {
   try {
     const id = req.params.id;
-    console.log("getUserById", id);
 
     const user = await User.findById(id).select("-password -__v");
 
